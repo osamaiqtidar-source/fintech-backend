@@ -24,7 +24,10 @@ class SyncOperation(SQLModel, table=True):
     company_id: int = Field(index=True)
     source: str
     operation_type: str
-    payload: dict = Field(sa_column=Column(nullable=False))
+
+    # FIX: JSONB instead of NullType
+    payload: dict = Field(sa_column=Column(JSONB, nullable=False))
+
     idempotency_key: Optional[str] = Field(index=True, default=None)
     status: str = Field(default='pending')
     attempts: int = Field(default=0)
@@ -56,5 +59,8 @@ class AppUpdate(SQLModel, table=True):
     company_id: int
     version: Optional[str] = None
     notes: Optional[str] = None
-    payload: Optional[dict] = Field(default=None, sa_column=Column(nullable=True))
+
+    # FIX: JSONB instead of NullType
+    payload: Optional[dict] = Field(default=None, sa_column=Column(JSONB, nullable=True))
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
