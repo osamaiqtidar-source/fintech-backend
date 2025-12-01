@@ -1,0 +1,20 @@
+
+from fastapi import FastAPI
+from .db import init_db
+from .routers import auth, admin, invoices, einvoice, connector
+
+app = FastAPI(title="Fintech Backend")
+
+@app.on_event("startup")
+def startup():
+    init_db()
+
+app.include_router(auth.router, prefix="/api/v1/auth")
+app.include_router(admin.router, prefix="/api/v1/admin")
+app.include_router(invoices.router, prefix="/api/v1/invoices")
+app.include_router(einvoice.router, prefix="/api/v1/einvoice")
+app.include_router(connector.router, prefix="/api/v1/connector")
+
+@app.get("/health")
+def health():
+    return {"status":"ok"}
