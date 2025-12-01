@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+sqlalchemy
+psycopg2-binary
+alembic
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic
+celery[redis]
+redis
+apscheduler
+python-dotenv
