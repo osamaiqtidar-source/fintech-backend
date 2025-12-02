@@ -1,1 +1,0 @@
-# Fintech Backend v7\n\n\n## Added in v7: Trial Logic\n- One-time trial per company (has_trial_once)\n- TrialSettings table and admin APIs at /admin/subscription/trial-settings\n- Service: app/services/trial_service.py\n- Alembic migration in alembic/versions/*_add_trial_settings.py\n
