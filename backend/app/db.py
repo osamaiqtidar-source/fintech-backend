@@ -1,22 +1,28 @@
+# backend/app/db.py
+
 import os
+import logging
 from sqlmodel import SQLModel, create_engine
 from sqlalchemy.orm import sessionmaker
 from passlib.context import CryptContext
 from sqlalchemy.exc import OperationalError
+
+# Optional: Silence SQLAlchemy noisy logs (recommended)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.ERROR)
+logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
 # ----------------------------
 # DATABASE URL FIXER (Render Safe)
 # ----------------------------
 raw_url = os.getenv("DATABASE_URL", "sqlite:///./test.db").strip()
 
-# Fix Heroku-style URLs
 if raw_url.startswith("postgres://"):
     raw_url = raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
 elif raw_url.startswith("postgresql://") and "+psycopg2" not in raw_url:
     raw_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 DATABASE_URL = raw_url
-
 
 # ----------------------------
 # ENGINE + SESSION
@@ -31,13 +37,11 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
 # ----------------------------
 # INIT DB (CREATE ALL TABLES)
 # ----------------------------
 def init_db():
     try:
-        # Import all models so SQLModel registers tables
         import backend.app.models
         import backend.app.models_extra
 
@@ -46,20 +50,18 @@ def init_db():
     except Exception as e:
         print("init_db error:", e)
 
-
 # ----------------------------
 # CREATE FIRST SUPER ADMIN
 # ----------------------------
 def ensure_first_super_admin():
     """
     Creates dynamic super admin only if none exists.
-    This version removes the table-check that caused warnings.
+    No premature SELECT queries, no table-check hack.
     """
     from backend.app.models import User
 
     db = SessionLocal()
     try:
-        # Check if super_admin already exists
         existing = db.query(User).filter(User.role == "super_admin").first()
 
         if existing:
@@ -71,7 +73,7 @@ def ensure_first_super_admin():
             email="admin@system.local",
             role="super_admin",
             is_dynamic_password=True,
-            password_hash=None,  # Dynamic password stores no hash
+            password_hash=None  # Dynamic password stores no hash
         )
 
         db.add(admin)
@@ -84,13 +86,3 @@ def ensure_first_super_admin():
         print("ensure_first_super_admin failed:", e)
     finally:
         db.close()
-
-
-# ----------------------------
-# RUN AUTOMATICALLY ON STARTUP
-# ----------------------------
-try:
-    init_db()
-    ensure_first_super_admin()
-except Exception as e:
-    print("Startup DB init failed:", e)
