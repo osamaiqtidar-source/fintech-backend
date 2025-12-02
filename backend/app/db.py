@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 # ----------------------------
 raw_url = os.getenv("DATABASE_URL", "sqlite:///./test.db").strip()
 
+# Fix Heroku-style URLs
 if raw_url.startswith("postgres://"):
     raw_url = raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
 elif raw_url.startswith("postgresql://") and "+psycopg2" not in raw_url:
@@ -32,10 +33,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ----------------------------
-# INIT DB
+# INIT DB (CREATE ALL TABLES)
 # ----------------------------
 def init_db():
     try:
+        # Import all models so SQLModel registers tables
         import backend.app.models
         import backend.app.models_extra
 
@@ -46,39 +48,38 @@ def init_db():
 
 
 # ----------------------------
-# CREATE DYNAMIC SUPER ADMIN
+# CREATE FIRST SUPER ADMIN
 # ----------------------------
 def ensure_first_super_admin():
-    """Creates dynamic-password super admin if none exists."""
+    """
+    Creates dynamic super admin only if none exists.
+    This version removes the table-check that caused warnings.
+    """
     from backend.app.models import User
 
     db = SessionLocal()
     try:
-        # Check if table exists
-        try:
-            db.execute('SELECT id FROM "user" LIMIT 1;')
-        except Exception:
-            print("⚠ User table not ready yet — skipping super_admin creation")
-            return
-
+        # Check if super_admin already exists
         existing = db.query(User).filter(User.role == "super_admin").first()
 
         if existing:
             print("✔ Super admin already exists")
             return
 
-        # Create dynamic super admin
+        # Create dynamic super admin (password = DDMMYYYYHH@Saad)
         admin = User(
             email="admin@system.local",
             role="super_admin",
             is_dynamic_password=True,
-            password_hash=None,   # IMPORTANT
+            password_hash=None,  # Dynamic password stores no hash
         )
 
         db.add(admin)
         db.commit()
         print("✔ Created dynamic super_admin (password = DDMMYYYYHH@Saad)")
 
+    except OperationalError as e:
+        print("Database not ready:", e)
     except Exception as e:
         print("ensure_first_super_admin failed:", e)
     finally:
@@ -86,7 +87,7 @@ def ensure_first_super_admin():
 
 
 # ----------------------------
-# RUN ON STARTUP
+# RUN AUTOMATICALLY ON STARTUP
 # ----------------------------
 try:
     init_db()
