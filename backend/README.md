@@ -1,1 +1,0 @@
-# FinTech Backend scaffold v2
