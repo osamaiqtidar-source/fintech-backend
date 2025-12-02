@@ -1,49 +1,92 @@
-# backend.app.db - database engine and init
 import os
-from sqlmodel import SQLModel, create_engine, Field, SQLModel
+from sqlmodel import SQLModel, create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, Integer, String, DateTime, func
 from passlib.context import CryptContext
+from sqlalchemy.exc import OperationalError
 
-# AUTO_DB_DRIVER_PREFERENCE: psycopg2 primary, psycopg3 fallback
-__RAW_DB = os.getenv('DATABASE_URL', 'sqlite:///./test.db').strip()
-__DB = __RAW_DB
-if __DB.startswith('postgres://'):
-    __DB = __DB.replace('postgres://', 'postgresql+psycopg2://', 1)
-elif __DB.startswith('postgresql://') and '+psycopg' not in __DB:
-    __DB = __DB.replace('postgresql://', 'postgresql+psycopg2://', 1)
-DATABASE_URL = __DB
-# END AUTO_DB_DRIVER_PREFERENCE
+# ----------------------------
+# DATABASE URL FIXER (Render Safe)
+# ----------------------------
+raw_url = os.getenv("DATABASE_URL", "sqlite:///./test.db").strip()
 
-engine = create_engine(DATABASE_URL, connect_args={'check_same_thread': False} if DATABASE_URL.startswith('sqlite') else {})
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+# Convert postgres:// → postgresql+psycopg2://
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif raw_url.startswith("postgresql://") and "+psycopg" not in raw_url:
+    raw_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
+DATABASE_URL = raw_url
+
+# ----------------------------
+# ENGINE
+# ----------------------------
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={'check_same_thread': False} if DATABASE_URL.startswith("sqlite") else {},
+    echo=False,
+)
+
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+# -------------------------------------------------------
+# INIT DB (CREATE ALL TABLES) — IMPORTANT FIX
+# -------------------------------------------------------
 def init_db():
     try:
-        from backend.app import models, models_extra
+        # Import ALL models so SQLModel registers tables
+        import backend.app.models
+        import backend.app.models_extra
+
         SQLModel.metadata.create_all(engine)
+        print("✔ All tables created successfully")
     except Exception as e:
-        print('init_db error:', e)
+        print("init_db error:", e)
 
-# FIRST_SUPER_ADMIN_CREATED - auto create a default super admin if none exists
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
+# -------------------------------------------------------
+# AUTO CREATE FIRST SUPER ADMIN (if none exists)
+# -------------------------------------------------------
 def ensure_first_super_admin():
-    try:
-        from backend.app.models import User
-        db = SessionLocal()
-        try:
-            existing = db.query(User).filter(getattr(User, 'role', None) == 'super_admin').first()
-            if not existing:
-                admin = User(email='admin@system.local', password_hash=pwd_context.hash('Admin@123'), role='super_admin')
-                db.add(admin)
-                db.commit()
-                print('✔ First super_admin created: admin@system.local / Admin@123')
-        finally:
-            db.close()
-    except Exception as e:
-        print('ensure_first_super_admin failed:', e)
+    """Create default super_admin ONLY if table exists AND no super_admin present."""
+    from backend.app.models import User  # Now correct path
 
+    try:
+        db = SessionLocal()
+
+        # Check if "role" column exists OR table exists
+        try:
+            db.execute("SELECT role FROM \"user\" LIMIT 1;")
+        except Exception:
+            print("⚠ User table not ready yet — skipping super_admin creation")
+            return
+
+        existing = db.query(User).filter(User.role == "super_admin").first()
+
+        if not existing:
+            admin = User(
+                email="admin@system.local",
+                password_hash=pwd_context.hash("Admin@123"),
+                role="super_admin"
+            )
+            db.add(admin)
+            db.commit()
+            print("✔ Created super_admin: admin@system.local / Admin@123")
+
+    except OperationalError as e:
+        print("Database not ready:", e)
+    except Exception as e:
+        print("ensure_first_super_admin failed:", e)
+    finally:
+        db.close()
+
+
+# Automatically run at startup
 try:
+    init_db()
     ensure_first_super_admin()
-except Exception:
-    pass
+except Exception as e:
+    print("Startup DB init failed:", e)
