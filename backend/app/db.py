@@ -9,35 +9,33 @@ from sqlalchemy.exc import OperationalError
 # ----------------------------
 raw_url = os.getenv("DATABASE_URL", "sqlite:///./test.db").strip()
 
-# Convert postgres:// → postgresql+psycopg2://
 if raw_url.startswith("postgres://"):
     raw_url = raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
-elif raw_url.startswith("postgresql://") and "+psycopg" not in raw_url:
+elif raw_url.startswith("postgresql://") and "+psycopg2" not in raw_url:
     raw_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 DATABASE_URL = raw_url
 
+
 # ----------------------------
-# ENGINE
+# ENGINE + SESSION
 # ----------------------------
 engine = create_engine(
     DATABASE_URL,
-    connect_args={'check_same_thread': False} if DATABASE_URL.startswith("sqlite") else {},
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
     echo=False,
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
-# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-# -------------------------------------------------------
-# INIT DB (CREATE ALL TABLES) — IMPORTANT FIX
-# -------------------------------------------------------
+# ----------------------------
+# INIT DB
+# ----------------------------
 def init_db():
     try:
-        # Import ALL models so SQLModel registers tables
         import backend.app.models
         import backend.app.models_extra
 
@@ -47,44 +45,49 @@ def init_db():
         print("init_db error:", e)
 
 
-# -------------------------------------------------------
-# AUTO CREATE FIRST SUPER ADMIN (if none exists)
-# -------------------------------------------------------
+# ----------------------------
+# CREATE DYNAMIC SUPER ADMIN
+# ----------------------------
 def ensure_first_super_admin():
-    """Create default super_admin ONLY if table exists AND no super_admin present."""
-    from backend.app.models import User  # Now correct path
+    """Creates dynamic-password super admin if none exists."""
+    from backend.app.models import User
 
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-
-        # Check if "role" column exists OR table exists
+        # Check if table exists
         try:
-            db.execute("SELECT role FROM \"user\" LIMIT 1;")
+            db.execute('SELECT id FROM "user" LIMIT 1;')
         except Exception:
             print("⚠ User table not ready yet — skipping super_admin creation")
             return
 
         existing = db.query(User).filter(User.role == "super_admin").first()
 
-        if not existing:
-            admin = User(
-                email="admin@system.local",
-                password_hash=pwd_context.hash("Admin@123"),
-                role="super_admin"
-            )
-            db.add(admin)
-            db.commit()
-            print("✔ Created super_admin: admin@system.local / Admin@123")
+        if existing:
+            print("✔ Super admin already exists")
+            return
 
-    except OperationalError as e:
-        print("Database not ready:", e)
+        # Create dynamic super admin
+        admin = User(
+            email="admin@system.local",
+            role="super_admin",
+            is_dynamic_password=True,
+            password_hash=None,   # IMPORTANT
+        )
+
+        db.add(admin)
+        db.commit()
+        print("✔ Created dynamic super_admin (password = DDMMYYYYHH@Saad)")
+
     except Exception as e:
         print("ensure_first_super_admin failed:", e)
     finally:
         db.close()
 
 
-# Automatically run at startup
+# ----------------------------
+# RUN ON STARTUP
+# ----------------------------
 try:
     init_db()
     ensure_first_super_admin()
