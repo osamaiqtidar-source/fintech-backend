@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, constr
 from typing import Optional, List
 from sqlalchemy.exc import IntegrityError
+from backend.app.deps import get_current_actor
 from backend.app.db import SessionLocal, pwd_context
 from backend.app.models import User
 from backend.app.deps import require_admin, require_super_admin  # must return current User
