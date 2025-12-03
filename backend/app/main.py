@@ -1,41 +1,27 @@
+# backend/app/main.py
 from fastapi import FastAPI
 from backend.app.db import init_db, ensure_first_super_admin
+from backend.app.routers import auth, admin, company_auth, connector, invoices, einvoice
+from backend.app.export.routes import export_router
+#from backend.app.tasks import start_backup_scheduler
 
-# IMPORT EXISTING ROUTERS
-from backend.app.routers import auth, admin
+app = FastAPI(title="Fintech Backend")
 
-# ✅ ADD THIS IMPORT
-from backend.app.routers import company_auth
-
-app = FastAPI(title="Fintech Backend v25")
-
-# -------------------------
-# Startup DB Init
-# -------------------------
 @app.on_event("startup")
 def startup_event():
-    try:
-        init_db()
-        ensure_first_super_admin()
-    except Exception as e:
-        print("Startup DB init failed:", e)
+    init_db()
+    ensure_first_super_admin()
+    # start backup scheduler if you enabled and configured S3 credentials
+    # start_backup_scheduler()
 
-# -------------------------
-# Routers
-# -------------------------
-
-# Admin Login + RBAC routes
 app.include_router(auth.router, prefix="/auth")
-
-# Admin Panel Routes
 app.include_router(admin.router, prefix="/admin")
-
-# ✅ COMPANY OTP AUTH ROUTES
 app.include_router(company_auth.router, prefix="/company")
+app.include_router(connector.router, prefix="/connector")
+app.include_router(invoices.router, prefix="/invoices")
+app.include_router(einvoice.router, prefix="/einvoice")
+app.include_router(export_router, prefix="/export", tags=["export"])
 
-# -------------------------
-# Health Check
-# -------------------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
