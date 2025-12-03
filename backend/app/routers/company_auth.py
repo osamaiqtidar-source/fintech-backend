@@ -1,120 +1,49 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta
-import random
-import string
-
+# backend/app/routers/company_auth.py
+from fastapi import APIRouter, HTTPException
 from backend.app.db import SessionLocal
 from backend.app.models_company import Company
-from backend.app.settings import settings
+from backend.app.models_admin_access import AdminCompanyAccess
+from datetime import datetime, timedelta
 from jose import jwt
+from backend.app import settings
+from backend.app.audit import log_admin_action
 
-from backend.app.utils.otp_delivery import send_sms_otp, send_email_otp
+router = APIRouter()
 
-router = APIRouter(prefix="/company", tags=["company-auth"])
-
-OTP_TTL_MINUTES = 5
-JWT_TTL_MINUTES = 60 * 24 * 7   # 7 days
-
-class RequestOtp(BaseModel):
-    phone: str
-    email: str | None = None
-    name: str | None = None
-
-class VerifyOtp(BaseModel):
-    phone: str
-    otp: str
-
-
-def generate_otp(length=6):
-    return "".join(random.choices(string.digits, k=length))
-
-
-def issue_company_token(company_id: int):
-    exp = datetime.utcnow() + timedelta(minutes=JWT_TTL_MINUTES)
-    return jwt.encode(
-        {
-            "sub": str(company_id),
-            "type": "company",
-            "exp": int(exp.timestamp())
-        },
-        settings.JWT_SECRET,
-        algorithm="HS256"
-    )
-
-
-@router.post("/request-otp")
-def request_otp(payload: RequestOtp, background: BackgroundTasks):
+@router.post("/access-approve")
+def approve_access(phone: str, otp: str):
+    """
+    Company owner calls this with their phone and the OTP they received.
+    Approves the admin access request and issues a temporary admin_company_access token.
+    """
     db = SessionLocal()
     try:
-        company = db.query(Company).filter(Company.phone == payload.phone).first()
-
-        # Auto-register company if first time
+        company = db.query(Company).filter(Company.phone == phone).first()
         if not company:
-            company = Company(
-                phone=payload.phone,
-                email=payload.email,
-                name=payload.name or payload.phone,
-            )
-            try:
-                db.add(company)
-                db.commit()
-                db.refresh(company)
-            except IntegrityError:
-                db.rollback()
-                company = db.query(Company).filter(Company.phone == payload.phone).first()
+            raise HTTPException(status_code=404, detail="Company not found")
 
-        otp = generate_otp()
-        expires = datetime.utcnow() + timedelta(minutes=OTP_TTL_MINUTES)
+        req = db.query(AdminCompanyAccess).filter(
+            AdminCompanyAccess.company_id == company.id,
+            AdminCompanyAccess.otp == otp,
+            AdminCompanyAccess.expires_at > datetime.utcnow(),
+            AdminCompanyAccess.approved == False
+        ).first()
 
-        company.otp_code = otp
-        company.otp_expires_at = expires
+        if not req:
+            raise HTTPException(status_code=401, detail="Invalid or expired OTP")
 
-        db.add(company)
-        db.commit()
+        req.approved = True
+        db.add(req); db.commit()
 
-        # Deliver OTP via SMS + Email
-        background.add_task(send_sms_otp, company.phone, otp)
-        if company.email:
-            background.add_task(send_email_otp, company.email, otp)
+        payload = {
+            "sub": str(req.admin_id),
+            "company_id": req.company_id,
+            "type": "admin_company_access",
+            "exp": int((datetime.utcnow() + timedelta(minutes=10)).timestamp())
+        }
+        token = jwt.encode(payload, settings.settings.JWT_SECRET, algorithm=settings.settings.JWT_ALGORITHM)
 
-        return {"ok": True, "expires_at": expires.isoformat()}
+        log_admin_action(db, req.admin_id, "approve_company_access", req.company_id, {"request_id": req.id})
+        return {"ok": True, "access_token": token, "expires_in": 600}
     finally:
         db.close()
-
-
-@router.post("/verify-otp")
-def verify_otp(payload: VerifyOtp):
-    db = SessionLocal()
-    try:
-        company = db.query(Company).filter(Company.phone == payload.phone).first()
-        if not company:
-            raise HTTPException(404, "Company not found")
-
-        if not company.otp_code or not company.otp_expires_at:
-            raise HTTPException(400, "OTP not requested")
-
-        if datetime.utcnow() > company.otp_expires_at:
-            company.otp_code = None
-            company.otp_expires_at = None
-            db.commit()
-            raise HTTPException(400, "OTP expired")
-
-        if payload.otp != company.otp_code:
-            raise HTTPException(401, "Invalid OTP")
-
-        # OTP verified – clear OTP
-        company.otp_code = None
-        company.otp_expires_at = None
-        db.commit()
-
-        token = issue_company_token(company.id)
-        return {"access_token": token, "token_type": "bearer", "company_id": company.id}
-    finally:
-        db.close()
-
-
-@router.post("/logout")
-def logout():
-    return {"ok": True}
