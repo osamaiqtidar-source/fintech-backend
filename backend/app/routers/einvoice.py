@@ -1,22 +1,39 @@
-from fastapi import APIRouter,BackgroundTasks,HTTPException
-from ..db import SessionLocal
-from .. import models_extra, models
-from ..tasks import submit_einvoice_worker
-from sqlmodel import select
-router=APIRouter()
-@router.post('/request/{invoice_id}')
-def request_einvoice(invoice_id:int,background_tasks:BackgroundTasks):
-    db=SessionLocal()
-    inv=db.get(models.Invoice,invoice_id)
-    if not inv:
-        raise HTTPException(404,'Invoice not found')
-    country=(inv.e_invoice_meta or {}).get('country') or 'IN'
-    q=select(models_extra.EInvoiceProvider).where(models_extra.EInvoiceProvider.country==country, models_extra.EInvoiceProvider.enabled==True).order_by(models_extra.EInvoiceProvider.priority)
-    provider=db.exec(q).first()
-    if not provider:
-        raise HTTPException(503,'No provider configured for this country')
-    payload={'invoice_id':inv.id,'company_id':inv.company_id,'items':inv.items,'totals':inv.totals,'tax':inv.tax_details,'country':country}
-    sub=models_extra.EInvoiceSubmission(invoice_id=inv.id,company_id=inv.company_id,provider_id=provider.id,provider_name=provider.provider_name,country=country,request_payload=payload)
-    db.add(sub);db.commit();db.refresh(sub)
-    background_tasks.add_task(submit_einvoice_worker,sub.id)
-    return {'ok':True,'submission_id':sub.id}
+# backend/app/routers/einvoice.py
+from fastapi import APIRouter, Depends, HTTPException
+from backend.app.deps import get_current_actor
+from backend.app.db import SessionLocal
+from backend.app import models
+from backend.app.audit import log_admin_action
+
+router = APIRouter()
+
+@router.post("/request/{invoice_id}")
+def request_einvoice(invoice_id: int, actor = Depends(get_current_actor)):
+    db = SessionLocal()
+    try:
+        # Determine company context
+        if actor["type"] == "company":
+            cid = actor["company"].id
+            admin_id = None
+        elif actor["type"] == "admin_company_access":
+            cid = actor["company_id"]
+            admin_id = actor.get("admin_id")
+        else:
+            raise HTTPException(status_code=403, detail="Admin must request company access")
+
+        inv = db.query(models.Invoice).filter(models.Invoice.id == invoice_id, models.Invoice.company_id == cid).first()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        # Existing e-invoice processing logic (call your existing functions)
+        # Example: result = generate_and_send_einvoice(db, inv)  # keep your existing einvoice logic
+        # For now, call your existing module function - ensure it's imported
+        from backend.app.einvoice import generate_einvoice_for_invoice
+        result = generate_einvoice_for_invoice(db, inv)
+
+        if admin_id:
+            log_admin_action(db, admin_id, "request_einvoice_admin", cid, {"invoice_id": invoice_id})
+
+        return result
+    finally:
+        db.close()
