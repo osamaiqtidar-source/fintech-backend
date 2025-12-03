@@ -44,6 +44,7 @@ def init_db():
     try:
         import backend.app.models
         import backend.app.models_extra
+        import backend.app.models_company
 
         SQLModel.metadata.create_all(engine)
         print("✔ All tables created successfully")
