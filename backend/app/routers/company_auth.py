@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
@@ -11,6 +11,7 @@ from backend.app.settings import settings
 from jose import jwt
 
 from backend.app.utils.otp_delivery import send_sms_otp, send_email_otp
+from backend.app.deps import get_current_actor  # ⭐ ADDED
 
 router = APIRouter(prefix="/company", tags=["company-auth"])
 
