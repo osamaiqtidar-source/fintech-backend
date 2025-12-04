@@ -1,9 +1,0 @@
-{
-  "invoice_title": "Facture",
-  "date": "Date",
-  "customer": "Client",
-  "amount": "Montant",
-  "tax": "Taxe",
-  "invoice_number": "Numéro de facture",
-  "total": "Total"
-}
