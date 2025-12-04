@@ -1,24 +1,39 @@
-# backend/app/main.py
-
 from fastapi import FastAPI
-from backend.app.db import init_db, ensure_first_super_admin
-from backend.app.routers import auth, admin
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Fintech Backend v25")
+# Correct router imports
+from backend.app.routers import auth, admin, company_auth, invoices, einvoice, connector, export
 
-# Run DB initialization ONLY when FastAPI is fully ready
-@app.on_event("startup")
-def startup_event():
-    try:
-        init_db()
-        ensure_first_super_admin()
-    except Exception as e:
-        print("Startup DB init failed:", e)
+app = FastAPI(title="Fintech Backend API", version="1.0.0")
 
-# include routers
-app.include_router(auth.router, prefix="/auth")
-app.include_router(admin.router, prefix="/admin")
+# ----------------------------------------------------
+# CORS (allow your frontend etc.)
+# ----------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],        # update this later for security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+# ----------------------------------------------------
+# Include all routers
+# ----------------------------------------------------
+app.include_router(auth.router)
+app.include_router(company_auth.router)
+app.include_router(invoices.router)
+app.include_router(einvoice.router)
+app.include_router(connector.router)
+app.include_router(export.router)
+
+# IMPORTANT: include admin router (for backup endpoints)
+app.include_router(admin.router)
+
+
+# ----------------------------------------------------
+# Health Check Endpoint
+# ----------------------------------------------------
+@app.get("/")
+def root():
+    return {"message": "Fintech Backend API is running"}
