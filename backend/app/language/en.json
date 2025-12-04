@@ -1,0 +1,9 @@
+{
+  "invoice_title": "Invoice",
+  "date": "Date",
+  "customer": "Customer",
+  "amount": "Amount",
+  "tax": "Tax",
+  "invoice_number": "Invoice Number",
+  "total": "Total"
+}
