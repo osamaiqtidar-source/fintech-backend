@@ -260,7 +260,7 @@ def delete_company_data(company_id: int, actor=Depends(get_current_actor)):
         db.close()
 
 # Backup endpoints
-from app.services.backup_service import backup_database_to_s3
+from backend.app.services.backup_service import backup_database_to_s3
 @router.post('/backup-now')
 def backup_now(actor=Depends(get_current_actor)):
     if actor['type'] != 'admin':
