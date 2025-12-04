@@ -3,6 +3,7 @@ from sqlmodel import SQLModel, Field
 from typing import Optional, Dict, Any
 from sqlalchemy import Column, Integer, String, JSON, Boolean, DateTime, func
 
+
 class EInvoiceProvider(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(sa_column=Column(String, nullable=False))
@@ -11,7 +12,13 @@ class EInvoiceProvider(SQLModel, table=True):
     config: Optional[Any] = Field(default=None, sa_column=Column(JSON))
     encrypted_credentials_ref: Optional[str] = Field(default=None, sa_column=Column(String))
     enabled: bool = Field(default=True, sa_column=Column(Boolean, server_default='true'))
-    created_at: Optional[DateTime] = Field(default=None, sa_column=Column(DateTime, server_default=func.now()))
+
+    # FIXED: SQLAlchemy DateTime must map to Python datetime | None
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime, server_default=func.now())
+    )
+
 
 class EInvoiceLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -21,4 +28,9 @@ class EInvoiceLog(SQLModel, table=True):
     request_payload: Optional[Any] = Field(default=None, sa_column=Column(JSON))
     response_payload: Optional[Any] = Field(default=None, sa_column=Column(JSON))
     status: Optional[str] = Field(default=None, sa_column=Column(String))
-    created_at: Optional[DateTime] = Field(default=None, sa_column=Column(DateTime, server_default=func.now()))
+
+    # FIXED: SQLAlchemy DateTime must map to Python datetime | None
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime, server_default=func.now())
+    )
