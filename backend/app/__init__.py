@@ -1,19 +1,29 @@
-# Export commonly used modules
+# Export commonly used models so "from backend.app import User" works
+
 from .models.user import User
 from .models.company import Company, AdminCompanyAccess
 
-# Re-export models packages
-from . import models
-
+# Re-export optional modules
 try:
     from . import models_extra
 except Exception:
-    pass
+    models_extra = None
 
 try:
     from . import models_einvoice
 except Exception:
-    pass
+    models_einvoice = None
 
 try:
-    from .
+    from . import cert_store
+except Exception:
+    cert_store = None
+
+__all__ = [
+    "User",
+    "Company",
+    "AdminCompanyAccess",
+    "models_extra",
+    "models_einvoice",
+    "cert_store",
+]
