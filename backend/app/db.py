@@ -1,16 +1,15 @@
-# backend/app/db.py
-
 import os
 import logging
-from sqlmodel import SQLModel, create_engine, declarative_base
-from sqlalchemy.orm import sessionmaker
+
+# FIX: declarative_base comes from sqlalchemy.orm now
+from sqlmodel import SQLModel, create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 from passlib.context import CryptContext
 from sqlalchemy.exc import OperationalError
 
 Base = declarative_base()
 
-
-# Optional: Silence SQLAlchemy noisy logs (recommended)
+# Silence SQLAlchemy logs
 logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
 logging.getLogger("sqlalchemy.pool").setLevel(logging.ERROR)
 logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
@@ -45,8 +44,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # ----------------------------
 def init_db():
     try:
-        import app.api.v1.models
-        import app.api.v1.models.company_extra
+        # FIX: correct imports
+        import backend.app.models
+        import backend.app.company_extra
 
         SQLModel.metadata.create_all(engine)
         print("✔ All tables created successfully")
@@ -57,10 +57,6 @@ def init_db():
 # CREATE FIRST SUPER ADMIN
 # ----------------------------
 def ensure_first_super_admin():
-    """
-    Creates dynamic super admin only if none exists.
-    No premature SELECT queries, no table-check hack.
-    """
     from backend.app.user import User
 
     db = SessionLocal()
@@ -71,12 +67,11 @@ def ensure_first_super_admin():
             print("✔ Super admin already exists")
             return
 
-        # Create dynamic super admin (password = DDMMYYYYHH@Saad)
         admin = User(
             email="admin@system.local",
             role="super_admin",
             is_dynamic_password=True,
-            password_hash=None  # Dynamic password stores no hash
+            password_hash=None
         )
 
         db.add(admin)
