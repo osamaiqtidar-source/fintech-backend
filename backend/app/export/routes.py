@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
-from app.deps import get_current_actor
+from backend.app.deps import get_current_actor
 from .report_generator import generate_sales, generate_purchase, generate_gst_summary
 from .csv_export import invoices_to_csv_string
 from .excel_export import invoices_to_xlsx_stream
