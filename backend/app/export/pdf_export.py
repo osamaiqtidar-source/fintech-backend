@@ -1,7 +1,7 @@
 import io
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from app.utils.translator import translate
+from backend.app.utils.translator import translate
 # Optional RTL support
 try:
     import arabic_reshaper
