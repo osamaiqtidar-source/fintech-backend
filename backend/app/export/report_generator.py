@@ -1,4 +1,4 @@
-from app.db import SessionLocal
+from backend.app.db import SessionLocal
 from sqlalchemy import text
 def _row_to_dict(r):
     try:
